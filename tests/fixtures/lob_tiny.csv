@@ -1,0 +1,4 @@
+,local_timestamp,asks[0].price,asks[0].amount,bids[0].price,bids[0].amount,asks[1].price,asks[1].amount,bids[1].price,bids[1].amount
+0,1000,100.5,10,100.4,5,100.6,20,100.3,8
+1,2000,100.5,12,100.4,5,100.6,20,100.3,8
+2,3000,100.5,12,100.4,4,100.6,20,100.3,8

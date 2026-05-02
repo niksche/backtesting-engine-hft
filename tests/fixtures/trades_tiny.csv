@@ -1,0 +1,4 @@
+,local_timestamp,side,price,amount
+0,1500,buy,100.5,3
+1,2500,sell,100.4,2
+2,3500,buy,100.6,1
