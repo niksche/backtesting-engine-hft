@@ -1,0 +1,41 @@
+# Large datasets — never commit
+data/lob.csv
+data/trades.csv
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+build/
+dist/
+.eggs/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# Tooling caches
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+
+# Editor
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Backtest outputs
+reports/
+out/
+
+.claude
+
+CLAUDE.md
+TASKS.md
