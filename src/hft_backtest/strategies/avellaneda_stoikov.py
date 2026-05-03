@@ -58,6 +58,8 @@ class AvellanedaStoikov(Strategy):
         "_repost_threshold",
         "_sigma_window",
         "_mid_history",
+        "_k_window",
+        "_trade_deltas",
         "_buy_id",
         "_sell_id",
         "_last_reservation",
@@ -71,6 +73,7 @@ class AvellanedaStoikov(Strategy):
         size: float = 100.0,
         dt: float = 1.0,
         sigma_window: float = 50.0,
+        k_window: float = 50.0,
         repost_threshold: float = 0.0,
     ) -> None:
         if gamma <= 0:
@@ -84,8 +87,10 @@ class AvellanedaStoikov(Strategy):
         self._size = size
         self._dt = dt
         self._sigma_window = int(sigma_window)
+        self._k_window = int(k_window)
         self._repost_threshold = repost_threshold
         self._mid_history: deque[float] = deque(maxlen=self._sigma_window)
+        self._trade_deltas: deque[float] = deque(maxlen=self._k_window)
         self._buy_id: int | None = None
         self._sell_id: int | None = None
         self._last_reservation: float | None = None
@@ -97,6 +102,13 @@ class AvellanedaStoikov(Strategy):
             self._inventory += fill.size
         else:
             self._inventory -= fill.size
+
+    def on_trade(self, trade: Trade, ctx: EngineContext) -> None:
+        """Track trade distances from mid to estimate order arrival intensity k."""
+        mid = ctx.book.mid()
+        if mid is not None:
+            delta = abs(trade.price - mid)
+            self._trade_deltas.append(delta)
 
     def on_snapshot(self, snapshot: LobSnapshot, ctx: EngineContext) -> None:
         """Compute reservation price + optimal spread, then quote."""
@@ -111,8 +123,10 @@ class AvellanedaStoikov(Strategy):
             return
 
         sigma = self._estimate_sigma()
+        k_est = self._estimate_k()
+        
         reservation = self._reservation_price(mid, self._inventory, sigma)
-        spread = self._optimal_spread(sigma)
+        spread = self._optimal_spread(sigma, k_est)
 
         # Only re-quote if reservation has moved enough.
         if (
@@ -134,27 +148,39 @@ class AvellanedaStoikov(Strategy):
         """r = s - q * gamma * sigma^2 * dt"""
         return mid - q * self._gamma * (sigma ** 2) * self._dt
 
-    def _optimal_spread(self, sigma: float) -> float:
+    def _optimal_spread(self, sigma: float, k: float) -> float:
         """delta = gamma * sigma^2 * dt + (2/gamma) * ln(1 + gamma/k)"""
         inventory_component = self._gamma * (sigma ** 2) * self._dt
-        arrival_component = (2.0 / self._gamma) * math.log(1.0 + self._gamma / self._k)
+        arrival_component = (2.0 / self._gamma) * math.log(1.0 + self._gamma / k)
         return inventory_component + arrival_component
 
+    def _estimate_k(self) -> float:
+        """Maximum likelihood estimate of k = 1 / mean(delta)."""
+        deltas = list(self._trade_deltas)
+        if len(deltas) < 2:
+            return self._k  # fallback to initial parameter
+        
+        mean_delta = sum(deltas) / len(deltas)
+        if mean_delta <= 1e-12:
+            return self._k
+            
+        return 1.0 / mean_delta
+
     def _estimate_sigma(self) -> float:
-        """Rolling standard deviation of mid-price log-returns."""
+        """Rolling standard deviation of absolute price changes (dS = sigma * dW)."""
         mids = list(self._mid_history)
         n = len(mids)
         if n < 2:
             return 0.0
 
-        # Log-returns.
-        returns = [math.log(mids[i] / mids[i - 1]) for i in range(1, n) if mids[i - 1] > 0]
-        if not returns:
+        # Absolute price changes
+        changes = [mids[i] - mids[i - 1] for i in range(1, n)]
+        if not changes:
             return 0.0
 
-        mean_r = sum(returns) / len(returns)
-        var_r = sum((r - mean_r) ** 2 for r in returns) / len(returns)
-        return math.sqrt(var_r)
+        mean_c = sum(changes) / len(changes)
+        var_c = sum((c - mean_c) ** 2 for c in changes) / len(changes)
+        return math.sqrt(var_c)
 
     def _cancel_safely(self, ctx: EngineContext) -> None:
         for attr in ("_buy_id", "_sell_id"):
