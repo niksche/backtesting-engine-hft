@@ -1,0 +1,25 @@
+# Avellaneda-Stoikov market-maker on sample data.
+#
+# Quotes around the reservation price:
+#   r = mid - q * gamma * sigma^2 * dt
+# with optimal spread:
+#   delta = gamma * sigma^2 * dt + (2/gamma) * ln(1 + gamma/k)
+#
+# Parameters tuned for the sample data (small-tick crypto pair, mid ~ 0.011).
+# The key insight: gamma and k must be scaled to the price magnitude.
+
+lob_path: ../../data/samples/lob_sample.csv
+trades_path: ../../data/samples/trades_sample.csv
+output_dir: ../../reports/avellaneda_stoikov
+
+strategy:
+  name: avellaneda_stoikov
+  params:
+    gamma: 100.0            # risk aversion (scaled for ~0.01 prices)
+    k: 1.0                # order arrival intensity (higher → tighter spread)
+    size: 100.0             # quote size per side
+    dt: 10.0                 # time horizon factor
+    sigma_window: 0.0      # rolling window for volatility estimate
+    repost_threshold: 0.0   # re-quote on any reservation price change
+
+partial_fills: false
