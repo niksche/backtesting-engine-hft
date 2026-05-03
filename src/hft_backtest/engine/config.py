@@ -41,14 +41,6 @@ class BacktestConfig:
             raise ConfigError(f"lob_path does not exist: {self.lob_path}")
         if not self.trades_path.exists():
             raise ConfigError(f"trades_path does not exist: {self.trades_path}")
-        if self.strategy.name not in _KNOWN_STRATEGIES:
-            raise ConfigError(
-                f"unknown strategy '{self.strategy.name}', "
-                f"known: {sorted(_KNOWN_STRATEGIES)}"
-            )
-
-
-_KNOWN_STRATEGIES = {"noop", "market_maker"}
 _TOP_KEYS = {"lob_path", "trades_path", "output_dir", "strategy", "partial_fills"}
 _STRATEGY_KEYS = {"name", "params"}
 

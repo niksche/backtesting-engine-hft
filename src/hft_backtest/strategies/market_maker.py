@@ -15,14 +15,14 @@ Known limitations of the naive version (intentional, see TASKS M6):
 These are deliberately out of scope; M11 may revisit.
 """
 
-from __future__ import annotations
-
 from hft_backtest.data.events import MarketEvent, Side
 from hft_backtest.engine.context import EngineContext
 from hft_backtest.orders.manager import OrderAlreadyDoneError
 from hft_backtest.strategies.base import Strategy
+from hft_backtest.strategies.registry import register
 
 
+@register("market_maker")
 class NaiveMarketMaker(Strategy):
     __slots__ = (
         "_half_spread",

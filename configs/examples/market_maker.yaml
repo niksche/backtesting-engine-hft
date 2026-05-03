@@ -13,6 +13,6 @@ strategy:
   params:
     half_spread: 0.0
     size: 100.0
-    repost_threshold: 0.0
+    repost_threshold: 0.000
 
 partial_fills: false

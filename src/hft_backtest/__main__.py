@@ -18,22 +18,10 @@ from hft_backtest.metrics.recorder import MetricsRecorder
 from hft_backtest.orderbook.book import OrderBook
 from hft_backtest.orders.manager import OrderManager
 from hft_backtest.reporting.report import generate_report
-from hft_backtest.strategies.base import Strategy
-from hft_backtest.strategies.market_maker import NaiveMarketMaker
 
-
-def _build_strategy(config: BacktestConfig) -> Strategy:
-    """Instantiate the strategy from config."""
-    if config.strategy.name == "noop":
-        return Strategy()
-    if config.strategy.name == "market_maker":
-        params = config.strategy.params
-        return NaiveMarketMaker(
-            half_spread=params.get("half_spread", 0.0),
-            size=params.get("size", 1.0),
-            repost_threshold=params.get("repost_threshold", 0.0),
-        )
-    raise ConfigError(f"unknown strategy: {config.strategy.name}")
+# Import strategies to trigger @register decorators.
+import hft_backtest.strategies  # noqa: F401
+from hft_backtest.strategies.registry import build_strategy
 
 
 def run_backtest(config: BacktestConfig) -> None:
@@ -43,7 +31,7 @@ def run_backtest(config: BacktestConfig) -> None:
     print(f"Loading data: {config.lob_path}, {config.trades_path}")
     events = EventStream(LobLoader(config.lob_path), TradesLoader(config.trades_path))
 
-    strategy = _build_strategy(config)
+    strategy = build_strategy(config.strategy.name, config.strategy.params)
     recorder = MetricsRecorder()
 
     print(f"Running backtest with strategy: {config.strategy.name}")

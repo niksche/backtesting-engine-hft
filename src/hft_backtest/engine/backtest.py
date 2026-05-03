@@ -2,21 +2,23 @@
 
 Per-event order of operations:
 
-    1. If event is a `LobSnapshot`, apply it to the book.
+    1. If event is a ``LobSnapshot``, apply it to the book.
     2. Run the matcher against the event:
-         - `LobSnapshot` -> `matcher.on_quote(book, active_orders)`
-         - `Trade`       -> `matcher.on_trade(event, active_orders)`
+         - ``LobSnapshot`` → ``matcher.on_quote(book, active_orders)``
+         - ``Trade``       → ``matcher.on_trade(event, active_orders)``
     3. Append any resulting fills to the log.
-    4. If a recorder is attached, feed fills and mark-to-market snapshots.
-    5. If a strategy is attached, call `strategy.on_event(event, ctx)`.
+    4. If a recorder is attached, feed fills to the recorder.
+    5. Build a context carrying this event's fills.
+    6. For each fill: call ``strategy.on_fill(fill, ctx)``.
+    7. Call ``strategy.on_event(event, ctx)``
+       (which dispatches to ``on_snapshot`` / ``on_trade`` by default).
+    8. Collect any market-order fills the strategy placed via ``ctx``,
+       record them in metrics and the fill log.
 
-Strategies react *after* matching, so orders they place in response to
-event E are matched starting from event E+1 — correct latency semantics
-(you can't trade against information you haven't seen yet).
-
-The active-order list is snapshotted before each match call so that
-mutations during fill emission (status -> FILLED) cannot interfere with
-iteration.
+Strategies react *after* matching, so limit orders placed in response to
+event E are matched starting from event E+1 — correct latency semantics.
+Market orders placed during the callback execute immediately within the
+same event.
 """
 
 from __future__ import annotations
@@ -37,7 +39,7 @@ if TYPE_CHECKING:
 
 
 class Backtest:
-    """One-shot backtest driver. Build, then call `run()` once."""
+    """One-shot backtest driver. Build, then call ``run()`` once."""
 
     __slots__ = ("_events", "_book", "_om", "_matcher", "_strategy", "_recorder")
 
@@ -60,7 +62,9 @@ class Backtest:
     def run(self) -> list[Fill]:
         fills_log: list[Fill] = []
         last_ts: int = 0
+
         for event in self._events:
+            # 1. Update book / match.
             if isinstance(event, LobSnapshot):
                 self._book.apply(event)
                 fills = self._matcher.on_quote(self._book, list(self._om.active()))
@@ -68,19 +72,43 @@ class Backtest:
                 fills = self._matcher.on_trade(event, list(self._om.active()))
             fills_log.extend(fills)
 
+            # 2. Record resting-order fills in metrics.
             if self._recorder is not None and fills:
                 mid = self._book.mid()
                 if mid is not None:
                     for fill in fills:
                         self._recorder.on_fill(fill, mid)
 
+            # 3. Strategy callbacks.
             if self._strategy is not None:
-                ctx = EngineContext(self._book, self._om, event.timestamp)
+                ctx = EngineContext(
+                    self._book,
+                    self._om,
+                    event.timestamp,
+                    fills=fills,
+                    recorder=self._recorder,
+                )
+
+                # 3a. on_fill per fill (before on_event).
+                for fill in fills:
+                    self._strategy.on_fill(fill, ctx)
+
+                # 3b. on_event (dispatches to on_snapshot / on_trade).
                 self._strategy.on_event(event, ctx)
+
+                # 3c. Collect market-order fills from ctx.
+                market_fills = ctx.market_fills
+                if market_fills:
+                    fills_log.extend(market_fills)
+                    if self._recorder is not None:
+                        mid = self._book.mid()
+                        if mid is not None:
+                            for mf in market_fills:
+                                self._recorder.on_fill(mf, mid)
 
             last_ts = event.timestamp
 
-        # Final mark-to-market snapshot at end of run.
+        # Final mark-to-market snapshot.
         if self._recorder is not None:
             mid = self._book.mid()
             if mid is not None:

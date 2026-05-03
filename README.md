@@ -99,26 +99,89 @@ python scripts/make_sample.py --seconds 60
 
 ## Writing a Custom Strategy
 
-Subclass `Strategy` and implement `on_event`:
+Subclass `Strategy` and override the callbacks you need:
 
 ```python
 from hft_backtest.strategies.base import Strategy
-from hft_backtest.data.events import MarketEvent, LobSnapshot, Side
+from hft_backtest.strategies.registry import register
+from hft_backtest.data.events import LobSnapshot, Trade, Side
 from hft_backtest.engine.context import EngineContext
+from hft_backtest.execution.fill import Fill
 
+@register("my_strategy")  # makes it available in YAML configs
 class MyStrategy(Strategy):
-    def on_event(self, event: MarketEvent, ctx: EngineContext) -> None:
-        if isinstance(event, LobSnapshot):
-            mid = ctx.book.mid()
-            if mid is not None:
-                ctx.place(Side.BUY, mid - 0.01, 10.0)
+
+    def on_fill(self, fill: Fill, ctx: EngineContext) -> None:
+        """Called when one of our orders fills (before on_event)."""
+        print(f"Filled: {fill.side.value} {fill.size} @ {fill.price}")
+
+    def on_snapshot(self, snapshot: LobSnapshot, ctx: EngineContext) -> None:
+        """Called on each L2 book update."""
+        mid = ctx.book.mid()
+        if mid and abs(ctx.position) < 500:
+            ctx.place(Side.BUY, mid - 0.001, 10.0)
+            ctx.place(Side.SELL, mid + 0.001, 10.0)
+
+    def on_trade(self, trade: Trade, ctx: EngineContext) -> None:
+        """Called on each trade print."""
+        # Take liquidity to hedge if inventory is too large
+        if ctx.position > 200:
+            ctx.market_sell(50.0)
+        elif ctx.position < -200:
+            ctx.market_buy(50.0)
 ```
 
-The `EngineContext` provides:
-- `ctx.book` — current order book state
-- `ctx.now` — event timestamp
-- `ctx.place(side, price, size)` — place a resting limit order
-- `ctx.cancel(order_id)` — cancel an active order
+### Strategy Callbacks
+
+| Callback | When | Use for |
+| -------- | ---- | ------- |
+| `on_fill(fill, ctx)` | After each fill on our orders | Inventory tracking, hedging |
+| `on_snapshot(snapshot, ctx)` | Each L2 book update | Quoting, signal computation |
+| `on_trade(trade, ctx)` | Each trade print | Momentum signals, hedging |
+| `on_event(event, ctx)` | Every event (catch-all) | Simple strategies |
+
+### EngineContext API
+
+```python
+# Book state
+ctx.book                   # OrderBook — mid(), spread(), best_bid(), best_ask(), bids, asks
+ctx.now                    # int — current timestamp (µs)
+
+# Limit orders (maker)
+ctx.place(side, price, size) -> Order
+ctx.cancel(order_id)         -> Order
+ctx.cancel_all()             -> list[Order]
+
+# Market orders (taker) — execute immediately
+ctx.market_buy(size)         -> Fill | None
+ctx.market_sell(size)        -> Fill | None
+
+# Order queries
+ctx.get_order(order_id)      -> Order
+ctx.active_orders            -> list[Order]
+
+# Event info
+ctx.fills                    -> list[Fill]  (fills from this event)
+
+# Position / PnL (requires MetricsRecorder)
+ctx.position                 -> float  (net inventory)
+ctx.realized_pnl             -> float
+ctx.unrealized_pnl           -> float
+ctx.total_pnl                -> float
+```
+
+### Plugin Registry
+
+Decorate your strategy with `@register("name")` to make it available in
+YAML configs:
+
+```yaml
+strategy:
+  name: my_strategy
+  params:
+    half_spread: 0.001
+    size: 10.0
+```
 
 ## License
 
