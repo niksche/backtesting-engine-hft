@@ -45,7 +45,7 @@ source = ["hft_backtest"]
 [tool.coverage.report]
 show_missing = true
 skip_covered = false
-fail_under = 0  # raised in M11
+fail_under = 80  # raised in M11
 
 [tool.mypy]
 python_version = "3.11"

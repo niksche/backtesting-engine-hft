@@ -49,7 +49,7 @@ class OrderManager:
     def cancel(self, order_id: int) -> Order:
         """Mark an active order CANCELLED. Returns the cancelled order."""
         order = self.get(order_id)
-        if order.status is not OrderStatus.NEW:
+        if not order.is_active:
             raise OrderAlreadyDoneError(
                 f"order {order_id} is {order.status.value}, cannot cancel"
             )

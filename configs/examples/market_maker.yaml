@@ -1,0 +1,18 @@
+# Market-maker backtest on sample data.
+#
+# The NaiveMarketMaker posts symmetric quotes at mid ± half_spread.
+# half_spread=0.0 means posting at the mid (aggressive — guaranteed fills).
+# Paths are resolved relative to this file's directory.
+
+lob_path: ../../data/samples/lob_sample.csv
+trades_path: ../../data/samples/trades_sample.csv
+output_dir: ../../reports/market_maker
+
+strategy:
+  name: market_maker
+  params:
+    half_spread: 0.0
+    size: 100.0
+    repost_threshold: 0.0
+
+partial_fills: false

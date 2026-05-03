@@ -26,7 +26,7 @@ class Order:
 
     @property
     def is_active(self) -> bool:
-        return self.status is OrderStatus.NEW
+        return self.status in (OrderStatus.NEW, OrderStatus.PARTIALLY_FILLED)
 
     @property
     def remaining_size(self) -> float:

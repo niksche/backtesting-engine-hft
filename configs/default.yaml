@@ -1,0 +1,13 @@
+# Default backtest configuration — noop strategy on sample data.
+#
+# Paths are resolved relative to this file's directory.
+
+lob_path: ../data/samples/lob_sample.csv
+trades_path: ../data/samples/trades_sample.csv
+output_dir: ../reports/default
+
+strategy:
+  name: noop
+  params: {}
+
+partial_fills: false
